@@ -66,6 +66,11 @@ options:
       - Specify desired state of the resource.
     choices: ['present','absent']
     default: 'present'
+  ip_version:
+    description:
+      - Specify IP version
+    choices: ['4','6']
+    default: '4'
 '''
 
 EXAMPLES = r'''
@@ -172,8 +177,11 @@ def get_interface_mode(interface, intf_type, module):
     return mode
 
 
-def get_hsrp_group(group, interface, module):
-    command = 'show hsrp group {0} all | json'.format(group)
+def get_hsrp_group(group, interface, module, ip_version):
+    if ip_version == '6':
+        command = 'show hsrp group {0} ipv6 | json'.format(group)
+    else:
+        command = 'show hsrp group {0} ipv4 | json'.format(group)
     hsrp = {}
 
     hsrp_key = {
@@ -234,12 +242,15 @@ def get_hsrp_group_unknown_enum(module, command, hsrp_table):
     return hsrp_table
 
 
-def get_commands_remove_hsrp(group, interface):
-    commands = ['interface {0}'.format(interface), 'no hsrp {0}'.format(group)]
+def get_commands_remove_hsrp(group, interface, ip_version):
+    if ip_version == '6':
+        commands = ['interface {0}'.format(interface), 'no hsrp {0} ipv6'.format(group)]
+    else:
+        commands = ['interface {0}'.format(interface), 'no hsrp {0}'.format(group)]
     return commands
 
 
-def get_commands_config_hsrp(delta, interface, args, existing):
+def get_commands_config_hsrp(delta, interface, args, existing, ip_version):
     commands = []
 
     config_args = {
@@ -248,6 +259,9 @@ def get_commands_config_hsrp(delta, interface, args, existing):
         'preempt': '{preempt}',
         'vip': '{vip}'
     }
+
+    if ip_version == '6':
+        config_args['group'] = 'hsrp {group} ipv6'
 
     preempt = delta.get('preempt', None)
     group = delta.get('group', None)
@@ -307,7 +321,10 @@ def get_commands_config_hsrp(delta, interface, args, existing):
                 commands.append('no authentication')
 
     if commands and not group:
-        commands.insert(0, 'hsrp {0}'.format(args['group']))
+        if ip_version == '6':
+            commands.insert(0, 'hsrp {0} ipv6'.format(args['group']))
+        else:
+            commands.insert(0, 'hsrp {0}'.format(args['group']))
 
     version = delta.get('version', None)
     if version:
@@ -359,7 +376,8 @@ def main():
         vip=dict(type='str', required=False),
         auth_type=dict(choices=['text', 'md5'], required=False),
         auth_string=dict(type='str', required=False),
-        state=dict(choices=['absent', 'present'], required=False, default='present')
+        state=dict(choices=['absent', 'present'], required=False, default='present'),
+        ip_version=dict(choices=['4', '6'], required=False, default='4', type='str')
     )
 
     argument_spec.update(nxos_argument_spec)
@@ -376,6 +394,7 @@ def main():
     priority = module.params['priority']
     preempt = module.params['preempt']
     vip = module.params['vip']
+    ip_version = module.params['ip_version']
     auth_type = module.params['auth_type']
     auth_full_string = module.params['auth_string']
     auth_enc = '0'
@@ -420,7 +439,7 @@ def main():
 
     proposed = dict((k, v) for k, v in args.items() if v is not None)
 
-    existing = get_hsrp_group(group, interface, module)
+    existing = get_hsrp_group(group, interface, module, ip_version)
 
     # This will enforce better practice with md5 and hsrp version.
     if proposed.get('auth_type', None) == 'md5':
@@ -439,12 +458,12 @@ def main():
         delta = dict(
             set(proposed.items()).difference(existing.items()))
         if delta:
-            command = get_commands_config_hsrp(delta, interface, args, existing)
+            command = get_commands_config_hsrp(delta, interface, args, existing, ip_version)
             commands.extend(command)
 
     elif state == 'absent':
         if existing:
-            command = get_commands_remove_hsrp(group, interface)
+            command = get_commands_remove_hsrp(group, interface, ip_version)
             commands.extend(command)
 
     if commands:
