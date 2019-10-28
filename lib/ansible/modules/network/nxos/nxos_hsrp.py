@@ -178,10 +178,7 @@ def get_interface_mode(interface, intf_type, module):
 
 
 def get_hsrp_group(group, interface, module, ip_version):
-    if ip_version == '6':
-        command = 'show hsrp group {0} ipv6 | json'.format(group)
-    else:
-        command = 'show hsrp group {0} ipv4 | json'.format(group)
+    command = 'show hsrp group {0} | json'.format(group)
     hsrp = {}
 
     hsrp_key = {
@@ -260,8 +257,8 @@ def get_commands_config_hsrp(delta, interface, args, existing, ip_version):
         'vip': '{vip}'
     }
 
-    if ip_version == '6':
-        config_args['group'] = 'hsrp {group} ipv6'
+    # if ip_version == '6':
+    #     config_args['group'] = 'hsrp {group} ipv6'
 
     preempt = delta.get('preempt', None)
     group = delta.get('group', None)
